@@ -179,6 +179,7 @@ def getAccessToken():
                 print(f"\nSuccessfully retrieved access token.")
                 print(f"Access Token: {access_token}")
                 print(f"Refresh Token: {refresh_token}")
+                print("\n\n-- Done Step 1.3 --")
                 return access_token, refresh_token
             else:
                 print(f"Failed to get access token: {data.get('msg')}")
@@ -187,9 +188,69 @@ def getAccessToken():
     return None, None
 
 # -- Step 1.4 : Get Refresh token
+def getRefreshToken():
+    global refresh_token, CLIENT_ID, CLIENT_SECRET
+    print("\n\n---- Step 4: Get Refresh Token ----")
+    if not refresh_token:
+        print("\nMissing Refresh Token. Cannot get new access token.")
+        return None
+    url_path = "/openapi/authorize/token"
+    params = {
+        "grant_type": "refresh_token",
+        "refresh_token": refresh_token
+    }
+    payload = {
+        "Content-Type": "application/json",
+        "client_id": CLIENT_ID,
+        "client_secret": CLIENT_SECRET
+    }
+    header = {
+        "Content-Type": "application/json"
+    }
+    response = make_request("POST", url_path, headers=header, json_data=payload, params=params)
+    
+    if response:
+        try:
+            data = response.json()
+            if data.get("errorCode") == 0:
+                result = data.get("result", {})                 
+                access_token = result.get("accessToken")
+                token_type = result.get("tokenType")
+                expires_in = result.get("expires_in")
+                refresh_token = result.get("refreshToken")
+                print(f"\nSuccessfully retrieved access token.")
+                print(f"Access Token: {access_token}")
+                print(f"Refresh Token: {refresh_token}")
+                print("\n\n-- Done Refresh --")
+                return access_token, refresh_token
+            else:
+                print(f"Failed to get access token: {data.get('msg')}")
+        except json.JSONDecodeError:
+            print("Failed to decode JSON from getAccessToken response.")
+    return None, None
 
 
 if __name__ == "__main__":
-    login()
-    getAuthCode()
-    getAccessToken()
+    # Step 1: Perform the initial login and get the first access token.
+    csrf, session = login()
+    if not (csrf and session):
+        print("Initial login failed. Exiting.")
+    else:
+        auth_code = getAuthCode()
+        if not auth_code:
+            print("Failed to get authorization code. Exiting.")
+        else:
+            # Get the first access token
+            access_token, refresh_token = getAccessToken()
+
+            # If we have a token, start a loop to refresh it periodically.
+            if access_token:
+                try:
+                    while True:
+                        wait_time_seconds = 7200  # 2 hours
+                        print(f"\n--- Waiting for {wait_time_seconds / 3600:.1f} hours before refreshing token... ---")
+                        print("Press Ctrl+C to exit.")
+                        time.sleep(wait_time_seconds)
+                        getRefreshToken()
+                except KeyboardInterrupt:
+                    print("\n\n--- Script interrupted by user. Exiting. ---")
