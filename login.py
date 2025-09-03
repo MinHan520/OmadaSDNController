@@ -133,9 +133,10 @@ def getAuthCode():
             data = response.json()
             if data.get("errorCode") == 0:
                 result = data.get("result", {})
-                authorization_code = result.get("code")
+                authorization_code = result
                 print(f"\nSuccessfully retrieved authorization code.")
-                print(f"Authorization Code: {authorization_code}")
+                print(f"Authorization Code: {result}")
+                #print(f"Authorization Code: {authorization_code}")
                 print("\n\n-- Done Step 1.2 --")
                 return authorization_code
             else:
@@ -145,33 +146,36 @@ def getAuthCode():
     return None
 # -- Step 1.3 : Get Access token 
 def getAccessToken():
-    global access_token, refresh_token, authorization_code
+    global access_token, refresh_token, authorization_code, CLIENT_ID, CLIENT_SECRET
     print("\n\n---- Step 3: Get Access Token ----")
     if not authorization_code:
         print("\nMissing Authorization Code. Cannot get access token.")
         return None, None
 
-    url_path = f"/openapi/authorize/token"
-    payload = {
-        "client_id": CLIENT_ID,
-        "client_secret": CLIENT_SECRET,
+    url_path = "/openapi/authorize/token"
+    params = {
         "grant_type": "authorization_code",
         "code": authorization_code
+    }
+    payload = {
+        "Content-Type": "application/json",
+        "client_id": CLIENT_ID,
+        "client_secret": CLIENT_SECRET
     }
     header = {
         "Content-Type": "application/json"
     }
     
-    response = make_request("POST", url_path, headers=header, json_data=payload)
+    response = make_request("POST", url_path, headers=header, json_data=payload, params=params)
     if response:
         try:
             data = response.json()
             if data.get("errorCode") == 0:
                 result = data.get("result", {})                 
-                access_token = result.get("access_token")
+                access_token = result.get("accessToken")
                 token_type = result.get("tokenType")
                 expires_in = result.get("expires_in")
-                refresh_token = result.get("refresh_token")
+                refresh_token = result.get("refreshToken")
                 print(f"\nSuccessfully retrieved access token.")
                 print(f"Access Token: {access_token}")
                 print(f"Refresh Token: {refresh_token}")
@@ -184,13 +188,6 @@ def getAccessToken():
 
 # -- Step 1.4 : Get Refresh token
 
-# -- Main --
-# if __name__ == "__main__":
-#     csrf_token, session_id = login()
-#     if csrf_token and session_id:
-#         authorization_code = getAuthCode()
-#         if authorization_code:
-#             getAccessToken()
 
 if __name__ == "__main__":
     login()
