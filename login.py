@@ -5,7 +5,7 @@ import time
 # --- Configuration ---
 CLIENT_ID = "975fc957360942df99cbd661a833e4cc"
 CLIENT_SECRET = "7488ee406c9843fa80e86d0f9570c693"
-BASE_URL = "https://10.30.31.159:8043"
+BASE_URL = "https://192.168.0.123:8043"
 OMADAC_ID = "6efebeb06fb81dfe27d81641e734ada3"
 USERNAME = "admin"
 PASSWORD = "Admin@12345"

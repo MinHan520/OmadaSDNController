@@ -5,7 +5,7 @@ import time
 # --- Configuration ---
 CLIENT_ID = "975fc957360942df99cbd661a833e4cc"
 CLIENT_SECRET = "7488ee406c9843fa80e86d0f9570c693"
-BASE_URL = "https://10.30.31.159:8043"
+BASE_URL = "https://10.30.31.241:8043"
 OMADAC_ID = "6efebeb06fb81dfe27d81641e734ada3"
 USERNAME = "admin"
 PASSWORD = "Admin@12345"
@@ -243,14 +243,25 @@ if __name__ == "__main__":
             # Get the first access token
             access_token, refresh_token = getAccessToken()
 
-            # If we have a token, start a loop to refresh it periodically.
-            if access_token:
-                try:
-                    while True:
-                        wait_time_seconds = 7200  # 2 hours
-                        print(f"\n--- Waiting for {wait_time_seconds / 3600:.1f} hours before refreshing token... ---")
-                        print("Press Ctrl+C to exit.")
-                        time.sleep(wait_time_seconds)
-                        getRefreshToken()
-                except KeyboardInterrupt:
-                    print("\n\n--- Script interrupted by user. Exiting. ---")
+            # If we have tokens, show the interactive menu.
+            if access_token and refresh_token:
+                while True:
+                    print("\n\n--- Interactive Menu ---")
+                    print("1. Use Refresh Token to get a new Access Token")
+                    print("q. Quit")
+
+                    try:
+                        choice = input("Enter your choice: ").strip()
+
+                        if choice == '1':
+                            getRefreshToken()
+                        elif choice.lower() == 'q':
+                            print("\nExiting script.")
+                            break
+                        else:
+                            print("\nInvalid choice. Please try again.")
+                    except KeyboardInterrupt:
+                        print("\n\n--- Script interrupted by user. Exiting. ---")
+                        break
+            else:
+                print("\nFailed to obtain initial tokens. Cannot proceed to interactive menu.")
