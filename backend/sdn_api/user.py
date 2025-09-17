@@ -1,354 +1,182 @@
-import sys
-import os
 import json
-import time
-
-# Add the project root ('OmadaSDNController') to the Python path.
-# This allows us to import modules from anywhere in the project.
-project_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-sys.path.append(project_root)
 
 # Import from the sdn_api package
-#from sdn_api import login as login_api
-import login as login_api
-from login import (
-    getAuthCode,
-    getAccessToken,
-    getRefreshToken,
-    make_request,
-)
+from .login import make_request
 
-def _handle_expired_token_and_retry(func, *args, **kwargs):
-    """
-    Handles API token expiration by refreshing the token and retrying the original function call.
+def _process_data_response(response):
+    """Helper to process JSON responses from the Omada API."""
+    if not response:
+        return None, -1 # Generic error for no response
 
-    Args:
-        func (callable): The original API function to retry.
-        *args: Positional arguments for the original function.
-        **kwargs: Keyword arguments for the original function.
+    try:
+        response_data = response.json()
+        error_code = response_data.get("errorCode")
 
-    Returns:
-        The result of the retried function call, or None if token refresh fails.
-    """
-    print("Access token expired (errorCode: -44112). Attempting to refresh token...")
-    new_access_token, _ = getRefreshToken()
-    if new_access_token:
-        print("Token refreshed successfully. Retrying the request...")
-        kwargs['_is_retry'] = True
-        return func(*args, **kwargs)
-    else:
-        print("Failed to refresh access token.")
-        return None
+        if error_code == 0:
+            # On success, return the 'result' object and an error code of 0
+            return response_data.get("result"), 0
+        else:
+            # On failure, return the full error payload and the specific error code
+            return response_data, error_code
+    except json.JSONDecodeError:
+        print("Error: Failed to decode JSON from response.")
+        return None, -1 # Generic JSON error
 
-### Need modification later 
-# Get user list --> There will be method for us to sort thinsg up I need to change some part for this
-def get_user_list(page, page_size, sorts=None, search_key=None, _is_retry=False):
-    """
-    Fetches a list of users from the Omada Controller.
-
-    Args:
-        page (int): The page number to retrieve, starting from 1.
-        page_size (int): The number of users per page (1-1000).
-        sorts (dict, optional): A dictionary for sorting, e.g., {'name': 'asc'}. Defaults to None.
-        search_key (str, optional): A string to search for in user names. Defaults to None.
-        _is_retry (bool): Internal flag to prevent infinite retry loops.
-
-    Returns:
-        dict: The 'result' part of the API response containing user data, or None on failure.
-    """
+def get_user_list(base_url, omadac_id, access_token, page, page_size, sorts=None, search_key=None):
     print("\n\n---- API Call: Get User List ----")
-    if not login_api.access_token:
-        print("\nMissing Access Token. Cannot get user list. Please log in first.")
-        return None
+    if not access_token:
+        print("\nMissing Access Token. Cannot get user list.")
+        return None, -1
 
-    url_path = f"/openapi/v1/{login_api.OMADAC_ID}/users"
-    
-    headers = {
-        "Authorization": f"AccessToken={login_api.access_token}"
-    }
-    # !!! Here can add on other params that are available in the get user list 
-    params = {
-        "page": page,
-        "pageSize": page_size
-    }
-    
+    url_path = f"/openapi/v1/{omadac_id}/users"
+    headers = {"Authorization": f"AccessToken={access_token}"}
+    params = {"page": page, "pageSize": page_size}
+
     if sorts:
         for key, value in sorts.items():
             params[f"sorts.{key}"] = value
-
     if search_key:
         params["searchKey"] = search_key
 
-    response = make_request("GET", url_path, headers=headers, params=params)
-    
-    if not response:
-        return None
-
-    try:
-        response_data = response.json()
-        error_code = response_data.get("errorCode")
-    except json.JSONDecodeError:
-        print("Error: Failed to decode JSON from response.")
-        return None
+    response = make_request(base_url, "GET", url_path, headers=headers, params=params)
+    data, error_code = _process_data_response(response)
 
     if error_code == 0:
-        user_list_data = response_data.get("result", {})
         print("\nSuccessfully retrieved user list.")
-        return user_list_data
-    
-    # Handle expired token error: -44112
-    if error_code == -44112 and not _is_retry:
-        return _handle_expired_token_and_retry(get_user_list, page, page_size, sorts=sorts, search_key=search_key)
+    else:
+        error_msg = data.get('msg', 'Unknown error') if isinstance(data, dict) else 'No response'
+        print(f"Error fetching user list: {error_msg} (Code: {error_code})")
 
-    if error_code == -44118:
-        print("Error: This interface only supports authorization code mode. Check your token.")
-
-    return None
+    return data, error_code
 
 # Get user Information
-def get_user_info(user_id, _is_retry=False):
+def get_user_info(base_url, omadac_id, access_token, user_id):
     """
     Fetches information for a single user from the Omada Controller.
-
-    Args:
-        user_id (str): The ID of the user to retrieve.
-        _is_retry (bool): Internal flag to prevent infinite retry loops.
-
-    Returns:
-        dict: The 'result' part of the API response containing user data, or None on failure.
     """
     print(f"\n\n---- API Call: Get User Info for ID: {user_id} ----")
-    if not login_api.access_token:
-        print("\nMissing Access Token. Cannot get user info. Please log in first.")
-        return None
-    
+    if not access_token:
+        print("\nMissing Access Token. Cannot get user info.")
+        return None, -1
+
     if not user_id:
         print("\nUser ID cannot be empty.")
-        return None
+        return None, -1
 
-    url_path = f"/openapi/v1/{login_api.OMADAC_ID}/users/{user_id}"
-    
-    headers = {
-        "Authorization": f"AccessToken={login_api.access_token}"
-    }
+    url_path = f"/openapi/v1/{omadac_id}/users/{user_id}"
+    headers = {"Authorization": f"AccessToken={access_token}"}
 
-    response = make_request("GET", url_path, headers=headers)
-    
-    if not response:
-        return None
-
-    try:
-        response_data = response.json()
-        error_code = response_data.get("errorCode")
-    except json.JSONDecodeError:
-        print("Error: Failed to decode JSON from response.")
-        return None
+    response = make_request(base_url, "GET", url_path, headers=headers)
+    data, error_code = _process_data_response(response)
 
     if error_code == 0:
-        user_info_data = response_data.get("result", {})
         print(f"\nSuccessfully retrieved info for user {user_id}.")
-        return user_info_data
-    
-    # Handle expired token error: -44112
-    if error_code == -44112 and not _is_retry:
-        return _handle_expired_token_and_retry(get_user_info, user_id)
+    else:
+        error_msg = data.get('msg', 'Unknown error') if isinstance(data, dict) else 'No response'
+        print(f"Error fetching user info: {error_msg} (Code: {error_code})")
 
-    if error_code == -44118:
-        print("Error: This interface only supports authorization code mode. Check your token.")
+    return data, error_code
 
-    print(f"Error fetching user info: {response_data.get('msg', 'Unknown error')}")
-    return None
-
-def get_role_list(_is_retry=False):
+def get_role_list(base_url, omadac_id, access_token):
     """
     Fetches a list of roles from the Omada Controller.
-
-    Args:
-        _is_retry (bool): Internal flag to prevent infinite retry loops.
-
-    Returns:
-        dict: The 'result' part of the API response containing role data, or None on failure.
     """
     print("\n\n---- API Call: Get Role List ----")
-    if not login_api.access_token:
-        print("\nMissing Access Token. Cannot get role list. Please log in first.")
-        return None
+    if not access_token:
+        print("\nMissing Access Token. Cannot get role list.")
+        return None, -1
 
-    url_path = f"/openapi/v1/{login_api.OMADAC_ID}/roles"
-    
-    headers = {
-        "Authorization": f"AccessToken={login_api.access_token}"
-    }
+    url_path = f"/openapi/v1/{omadac_id}/roles"
+    headers = {"Authorization": f"AccessToken={access_token}"}
 
-    response = make_request("GET", url_path, headers=headers)
-    
-    if not response:
-        return None
-
-    try:
-        response_data = response.json()
-        error_code = response_data.get("errorCode")
-    except json.JSONDecodeError:
-        print("Error: Failed to decode JSON from response.")
-        return None
+    response = make_request(base_url, "GET", url_path, headers=headers)
+    data, error_code = _process_data_response(response)
 
     if error_code == 0:
-        role_list_data = response_data.get("result", {})
         print("\nSuccessfully retrieved role list.")
-        return role_list_data
-    
-    if error_code == -44112 and not _is_retry:
-        return _handle_expired_token_and_retry(get_role_list)
+    else:
+        error_msg = data.get('msg', 'Unknown error') if isinstance(data, dict) else 'No response'
+        print(f"Error fetching role list: {error_msg} (Code: {error_code})")
 
-    print(f"Error fetching role list: {response_data.get('msg', 'Unknown error')}")
-    return None
+    return data, error_code
 
-def get_role_info(role_id, _is_retry=False):
+def get_role_info(base_url, omadac_id, access_token, role_id):
     """
     Fetches information for a single role from the Omada Controller.
-
-    Args:
-        role_id (str): The ID of the role to retrieve.
-        _is_retry (bool): Internal flag to prevent infinite retry loops.
-
-    Returns:
-        dict: The 'result' part of the API response containing role data, or None on failure.
     """
     print(f"\n\n---- API Call: Get Role Info for ID: {role_id} ----")
-    if not login_api.access_token:
-        print("\nMissing Access Token. Cannot get role info. Please log in first.")
-        return None
-    
+    if not access_token:
+        print("\nMissing Access Token. Cannot get role info.")
+        return None, -1
+
     if not role_id:
         print("\nRole ID cannot be empty.")
-        return None
+        return None, -1
 
-    url_path = f"/openapi/v1/{login_api.OMADAC_ID}/roles/{role_id}"
-    
-    headers = {
-        "Authorization": f"AccessToken={login_api.access_token}"
-    }
+    url_path = f"/openapi/v1/{omadac_id}/roles/{role_id}"
+    headers = {"Authorization": f"AccessToken={access_token}"}
 
-    response = make_request("GET", url_path, headers=headers)
-    
-    if not response:
-        return None
-
-    try:
-        response_data = response.json()
-        error_code = response_data.get("errorCode")
-    except json.JSONDecodeError:
-        print("Error: Failed to decode JSON from response.")
-        return None
+    response = make_request(base_url, "GET", url_path, headers=headers)
+    data, error_code = _process_data_response(response)
 
     if error_code == 0:
-        role_info_data = response_data.get("result", {})
         print(f"\nSuccessfully retrieved info for role {role_id}.")
-        return role_info_data
-    
-    if error_code == -44112 and not _is_retry:
-        return _handle_expired_token_and_retry(get_role_info, role_id)
+    else:
+        error_msg = data.get('msg', 'Unknown error') if isinstance(data, dict) else 'No response'
+        print(f"Error fetching role info: {error_msg} (Code: {error_code})")
 
-    print(f"Error fetching role info: {response_data.get('msg', 'Unknown error')}")
-    return None
+    return data, error_code
 
-def get_local_users(_is_retry=False):
+def get_local_users(base_url, omadac_id, access_token):
     """
     Fetches a list of local users (excluding owner) from the Omada Controller.
-
-    Args:
-        _is_retry (bool): Internal flag to prevent infinite retry loops.
-
-    Returns:
-        dict: The 'result' part of the API response containing local user data, or None on failure.
     """
     print("\n\n---- API Call: Get Local Users ----")
-    if not login_api.access_token:
-        print("\nMissing Access Token. Cannot get local users. Please log in first.")
-        return None
+    if not access_token:
+        print("\nMissing Access Token. Cannot get local users.")
+        return None, -1
 
-    url_path = f"/openapi/v1/{login_api.OMADAC_ID}/users/local"
-    
-    headers = {
-        "Authorization": f"AccessToken={login_api.access_token}"
-    }
+    url_path = f"/openapi/v1/{omadac_id}/users/local"
+    headers = {"Authorization": f"AccessToken={access_token}"}
 
-    response = make_request("GET", url_path, headers=headers)
-    
-    if not response:
-        return None
-
-    try:
-        response_data = response.json()
-        error_code = response_data.get("errorCode")
-    except json.JSONDecodeError:
-        print("Error: Failed to decode JSON from response.")
-        return None
+    response = make_request(base_url, "GET", url_path, headers=headers)
+    data, error_code = _process_data_response(response)
 
     if error_code == 0:
-        local_user_data = response_data.get("result", {})
         print("\nSuccessfully retrieved local users.")
-        return local_user_data
-    
-    if error_code == -1004:
-        print("\nThere are no user, please try again")
-        return None
+    else:
+        error_msg = data.get('msg', 'Unknown error') if isinstance(data, dict) else 'No response'
+        print(f"Error fetching local users: {error_msg} (Code: {error_code})")
 
-    if error_code == -44112 and not _is_retry:
-        return _handle_expired_token_and_retry(get_local_users)
+    return data, error_code
 
-    print(f"Error fetching local users: {response_data.get('msg', 'Unknown error')}")
-    return None
-
-def get_cloud_user(_is_retry=False):
+def get_cloud_user(base_url, omadac_id, access_token):
     """
     Fetches a list of cloud users (excluding owner) from the Omada Controller.
-
-    Args:
-        _is_retry (bool): Internal flag to prevent infinite retry loops.
-
-    Returns:
-        dict: The 'result' part of the API response containing cloud user data, or None on failure.
     """
     print("\n\n---- API Call: Get Cloud Users ----")
-    if not login_api.access_token:
-        print("\nMissing Access Token. Cannot get cloud users. Please log in first.")
-        return None
+    if not access_token:
+        print("\nMissing Access Token. Cannot get cloud users.")
+        return None, -1
 
-    url_path = f"/openapi/v1/{login_api.OMADAC_ID}/users/cloud"
-    
-    headers = {
-        "Authorization": f"AccessToken={login_api.access_token}"
-    }
+    url_path = f"/openapi/v1/{omadac_id}/users/cloud"
+    headers = {"Authorization": f"AccessToken={access_token}"}
 
-    response = make_request("GET", url_path, headers=headers)
-    
-    if not response:
-        return None
-
-    try:
-        response_data = response.json()
-        error_code = response_data.get("errorCode")
-    except json.JSONDecodeError:
-        print("Error: Failed to decode JSON from response.")
-        return None
+    response = make_request(base_url, "GET", url_path, headers=headers)
+    data, error_code = _process_data_response(response)
 
     if error_code == 0:
-        cloud_user_data = response_data.get("result", {})
         print("\nSuccessfully retrieved cloud users.")
-        return cloud_user_data
-    
-    if error_code == -1004:
-        print("\nThere are no user, please try again")
-        return None
+    else:
+        error_msg = data.get('msg', 'Unknown error') if isinstance(data, dict) else 'No response'
+        print(f"Error fetching cloud users: {error_msg} (Code: {error_code})")
 
-    if error_code == -44112 and not _is_retry:
-        return _handle_expired_token_and_retry(get_cloud_user)
-
-    print(f"Error fetching cloud users: {response_data.get('msg', 'Unknown error')}")
-    return None
+    return data, error_code
 
 def create_user(
+    base_url,
+    omadac_id,
+    access_token,
     name,
     role_id,
     user_type,
@@ -385,14 +213,14 @@ def create_user(
         dict: The 'result' part of the API response, or None on failure.
     """
     print(f"\n\n---- API Call: Create User: {name} ----")
-    if not login_api.access_token:
-        print("\nMissing Access Token. Cannot create user. Please log in first.")
-        return None
+    if not access_token:
+        print("\nMissing Access Token. Cannot create user.")
+        return None, -1
 
-    url_path = f"/openapi/v1/{login_api.OMADAC_ID}/users"
+    url_path = f"/openapi/v1/{omadac_id}/users"
 
     headers = {
-        "Authorization": f"AccessToken={login_api.access_token}",
+        "Authorization": f"AccessToken={access_token}",
         "Content-Type": "application/json"
     }
 
@@ -413,43 +241,21 @@ def create_user(
     if start_time is not None: payload["startTime"] = start_time
     if end_time is not None: payload["endTime"] = end_time
 
-    response = make_request("POST", url_path, headers=headers, json_data=payload)
-    
-    if not response:
-        return None
-
-    try:
-        response_data = response.json()
-        error_code = response_data.get("errorCode")
-    except json.JSONDecodeError:
-        print("Error: Failed to decode JSON from response.")
-        return None
+    response = make_request(base_url, "POST", url_path, headers=headers, json_data=payload)
+    data, error_code = _process_data_response(response)
 
     if error_code == 0:
-        create_user_result = response_data.get("result", {})
         print(f"\nSuccessfully created user '{name}'.")
-        return create_user_result
-    
-    if error_code == -44112 and not _is_retry:
-        return _handle_expired_token_and_retry(
-            create_user,
-            name=name,
-            role_id=role_id,
-            user_type=user_type,
-            all_site=all_site,
-            password=password,
-            email=email,
-            alert=alert,
-            incident_notification=incident_notification,
-            sites=sites,
-            temporary_enable=temporary_enable,
-            start_time=start_time,
-            end_time=end_time)
+    else:
+        error_msg = data.get('msg', 'Unknown error') if isinstance(data, dict) else 'No response'
+        print(f"Error creating user: {error_msg} (Code: {error_code})")
 
-    print(f"Error creating user: {response_data.get('msg', 'Unknown error')}")
-    return None
+    return data, error_code
 
 def modify_user(
+    base_url,
+    omadac_id,
+    access_token,
     user_id,
     name,
     role_id,
@@ -488,18 +294,18 @@ def modify_user(
         dict: The 'result' part of the API response, or None on failure.
     """
     print(f"\n\n---- API Call: Modify User: {user_id} ----")
-    if not login_api.access_token:
-        print("\nMissing Access Token. Cannot modify user. Please log in first.")
-        return None
+    if not access_token:
+        print("\nMissing Access Token. Cannot modify user.")
+        return None, -1
 
     if not user_id:
         print("\nUser ID is required to modify a user.")
-        return None
+        return None, -1
 
-    url_path = f"/openapi/v1/{login_api.OMADAC_ID}/users/{user_id}"
+    url_path = f"/openapi/v1/{omadac_id}/users/{user_id}"
 
     headers = {
-        "Authorization": f"AccessToken={login_api.access_token}",
+        "Authorization": f"AccessToken={access_token}",
         "Content-Type": "application/json"
     }
 
@@ -516,28 +322,18 @@ def modify_user(
     if start_time is not None: payload["startTime"] = start_time
     if end_time is not None: payload["endTime"] = end_time
 
-    response = make_request("PUT", url_path, headers=headers, json_data=payload)
-    
-    if not response: return None
-    try:
-        response_data = response.json()
-        error_code = response_data.get("errorCode")
-    except json.JSONDecodeError:
-        print("Error: Failed to decode JSON from response.")
-        return None
+    response = make_request(base_url, "PUT", url_path, headers=headers, json_data=payload)
+    data, error_code = _process_data_response(response)
 
     if error_code == 0:
-        modify_user_result = response_data.get("result", {})
         print(f"\nSuccessfully modified user '{name}' (ID: {user_id}).")
-        return modify_user_result
-    
-    if error_code == -44112 and not _is_retry:
-        return _handle_expired_token_and_retry(modify_user, user_id=user_id, name=name, role_id=role_id, all_site=all_site, password=password, email=email, alert=alert, force_modify=force_modify, incident_notification=incident_notification, sites=sites, temporary_enable=temporary_enable, start_time=start_time, end_time=end_time)
+    else:
+        error_msg = data.get('msg', 'Unknown error') if isinstance(data, dict) else 'No response'
+        print(f"Error modifying user: {error_msg} (Code: {error_code})")
 
-    print(f"Error modifying user: {response_data.get('msg', 'Unknown error')}")
-    return None
+    return data, error_code
 
-def delete_user(user_id, force_delete=None, _is_retry=False):
+def delete_user(base_url, omadac_id, access_token, user_id, force_delete=None):
     """
     Deletes an existing user from the Omada Controller.
 
@@ -550,18 +346,18 @@ def delete_user(user_id, force_delete=None, _is_retry=False):
         dict: An empty dictionary on success, or None on failure.
     """
     print(f"\n\n---- API Call: Delete User: {user_id} ----")
-    if not login_api.access_token:
-        print("\nMissing Access Token. Cannot delete user. Please log in first.")
-        return None
+    if not access_token:
+        print("\nMissing Access Token. Cannot delete user.")
+        return None, -1
 
     if not user_id:
         print("\nUser ID is required to delete a user.")
-        return None
+        return None, -1
 
-    url_path = f"/openapi/v1/{login_api.OMADAC_ID}/users/{user_id}"
+    url_path = f"/openapi/v1/{omadac_id}/users/{user_id}"
 
     headers = {
-        "Authorization": f"AccessToken={login_api.access_token}",
+        "Authorization": f"AccessToken={access_token}",
         "Content-Type": "application/json"
     }
 
@@ -569,27 +365,13 @@ def delete_user(user_id, force_delete=None, _is_retry=False):
     if force_delete is not None:
         payload["forceDelete"] = force_delete
 
-    response = make_request("DELETE", url_path, headers=headers, json_data=payload if payload else None)
-    
-    if not response:
-        return None
-
-    try:
-        response_data = response.json()
-        error_code = response_data.get("errorCode")
-    except json.JSONDecodeError:
-        if response.status_code in [200, 204]:
-            print(f"\nSuccessfully deleted user with ID: {user_id}.")
-            return {}
-        print("Error: Failed to decode JSON from response.")
-        return None
+    response = make_request(base_url, "DELETE", url_path, headers=headers, json_data=payload if payload else None)
+    data, error_code = _process_data_response(response)
 
     if error_code == 0:
         print(f"\nSuccessfully deleted user with ID: {user_id}.")
-        return response_data.get("result", {})
-    
-    if error_code == -44112 and not _is_retry:
-        return _handle_expired_token_and_retry(delete_user, user_id=user_id, force_delete=force_delete)
+    else:
+        error_msg = data.get('msg', 'Unknown error') if isinstance(data, dict) else 'No response'
+        print(f"Error deleting user: {error_msg} (Code: {error_code})")
 
-    print(f"Error deleting user: {response_data.get('msg', 'Unknown error')}")
-    return None
+    return data, error_code

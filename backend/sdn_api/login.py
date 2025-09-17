@@ -1,24 +1,20 @@
 import requests
 import json
-import time
 
 # --- Configuration ---
 CLIENT_ID = "975fc957360942df99cbd661a833e4cc"
 CLIENT_SECRET = "7488ee406c9843fa80e86d0f9570c693"
-BASE_URL = "https://10.30.31.174:8043"
 OMADAC_ID = "6efebeb06fb81dfe27d81641e734ada3"
-USERNAME = "admin"
-PASSWORD = "Admin@12345"
+# USERNAME = "admin"
+# PASSWORD = "Admin@12345"
 
-# -- Global variable to store tokens ---
-csrf_token = None
-session_id = None
-authorization_code = None
-access_token = None
-refresh_token = None
-
-def make_request(method, url_path, headers=None, data=None, json_data=None,  params=None):
-    url = f"{BASE_URL}{url_path}"
+def make_request(base_url, method, url_path, headers=None, data=None, json_data=None,  params=None):
+    """
+    A stateless request helper that requires the base_url for each call.
+    """
+    if not base_url:
+        raise ValueError("base_url must be provided to make_request")
+    url = f"{base_url}{url_path}"
     print(f"\n--- New Request ---")
     print(f"Request: {method.upper()} {url}")
     if headers: print(f"Headers: {json.dumps(headers, indent=2)}")
@@ -58,8 +54,7 @@ def make_request(method, url_path, headers=None, data=None, json_data=None,  par
         return None
 
 # --- Step 1.1 : Login - Get CSRF Token and Session ID
-def login():
-    global csrf_token, session_id
+def login_to_controller(base_url, username, password):
     print("\n---- Step 1: Logging in to get CSRF token and Session ID ----")
     # This endpoint is for the OpenAPI authorization flow, matching your curl command
     url_path = "/openapi/authorize/login"
@@ -67,15 +62,15 @@ def login():
         "client_id": CLIENT_ID,
         "omadac_id": OMADAC_ID,
     }
-    header = {
+    headers = {
         "Content-Type": "application/json"
     }
     payload = {
-        "username": USERNAME,
-        "password": PASSWORD
+        "username": username,
+        "password": password
     }
 
-    response = make_request("POST", url_path, headers=header, json_data=payload, params=params)
+    response = make_request(base_url, "POST", url_path, headers=headers, json_data=payload, params=params)
 
     if response:
         try:
@@ -86,34 +81,19 @@ def login():
                 session_id = result.get("sessionId")
                 print(f"\nSuccessfully logged in via OpenAPI.")
                 print(f"CSRF Token: {csrf_token}")
-                print(f"Session ID: {session_id}")
-                print("\n\n-- Done Step 1.1 --")
                 return csrf_token, session_id
             else:
                 print(f"Login failed: {data.get('msg')}")
         except json.JSONDecodeError:
             print("Failed to decode JSON from login response.")
     return None, None
-
-# --- Helper Functions ---
-def strip_session_id_prefix(full_session_id):
-    """Removes the 'iam-' prefix from the session ID if it exists."""
-    if full_session_id and full_session_id.startswith('iam-'):
-        return full_session_id.replace('iam-', '')
-    return full_session_id
-
+ 
 # -- Step 1.2 : Get Authentication Code 
-def getAuthCode():
-    global authorization_code
+def get_auth_code(base_url, csrf_token, session_id):
     print("\n\n---- Step 2: Get Authentication Code ----")
-    print("Full Session ID from login: ", session_id)
     if not (csrf_token and session_id):
         print("\nMissing CSRF Token or SessionID. Please generate again later.")
         return None
-    
-    # # Strip the 'iam-' prefix from the session ID and print it for verification
-    # clean_session_id = strip_session_id_prefix(session_id)
-    # print(f"Cleaned Session ID for Cookie: {clean_session_id}")
 
     url_path = f"/openapi/authorize/code"
     params = {
@@ -126,8 +106,8 @@ def getAuthCode():
         "Csrf-token": csrf_token,
         "Cookie": f"TPOMADA_SESSIONID={session_id}"
     }
-    
-    response = make_request("POST", url_path, headers=headers, params=params)
+
+    response = make_request(base_url, "POST", url_path, headers=headers, params=params)
     if response:
         try:
             data = response.json()
@@ -136,29 +116,26 @@ def getAuthCode():
                 authorization_code = result
                 print(f"\nSuccessfully retrieved authorization code.")
                 print(f"Authorization Code: {result}")
-                #print(f"Authorization Code: {authorization_code}")
-                print("\n\n-- Done Step 1.2 --")
                 return authorization_code
             else:
                 print(f"Failed to get authorization code: {data.get('msg')}")
         except json.JSONDecodeError:
             print("Failed to decode JSON from getAuthCode response.")
     return None
+
 # -- Step 1.3 : Get Access token 
-def getAccessToken():
-    global access_token, refresh_token, authorization_code, CLIENT_ID, CLIENT_SECRET
+def get_access_token(base_url, authorization_code):
     print("\n\n---- Step 3: Get Access Token ----")
     if not authorization_code:
         print("\nMissing Authorization Code. Cannot get access token.")
         return None, None
-
+ 
     url_path = "/openapi/authorize/token"
     params = {
         "grant_type": "authorization_code",
         "code": authorization_code
     }
     payload = {
-        "Content-Type": "application/json",
         "client_id": CLIENT_ID,
         "client_secret": CLIENT_SECRET
     }
@@ -166,102 +143,56 @@ def getAccessToken():
         "Content-Type": "application/json"
     }
     
-    response = make_request("POST", url_path, headers=header, json_data=payload, params=params)
+    response = make_request(base_url, "POST", url_path, headers=header, json_data=payload, params=params)
     if response:
         try:
             data = response.json()
             if data.get("errorCode") == 0:
                 result = data.get("result", {})                 
                 access_token = result.get("accessToken")
-                token_type = result.get("tokenType")
-                expires_in = result.get("expires_in")
                 refresh_token = result.get("refreshToken")
                 print(f"\nSuccessfully retrieved access token.")
                 print(f"Access Token: {access_token}")
                 print(f"Refresh Token: {refresh_token}")
-                print("\n\n-- Done Step 1.3 --")
                 return access_token, refresh_token
             else:
                 print(f"Failed to get access token: {data.get('msg')}")
         except json.JSONDecodeError:
             print("Failed to decode JSON from getAccessToken response.")
     return None, None
-
+ 
 # -- Step 1.4 : Get Refresh token
-def getRefreshToken():
-    global refresh_token, CLIENT_ID, CLIENT_SECRET
-    print("\n\n---- Step 4: Get Refresh Token ----")
-    if not refresh_token:
+def get_refresh_token(base_url, current_refresh_token):
+    print("\n\n---- Step 4: Refreshing Access Token ----")
+    if not current_refresh_token:
         print("\nMissing Refresh Token. Cannot get new access token.")
-        return None
+        return None, None
+
     url_path = "/openapi/authorize/token"
     params = {
         "grant_type": "refresh_token",
-        "refresh_token": refresh_token
+        "refresh_token": current_refresh_token
     }
     payload = {
-        "Content-Type": "application/json",
         "client_id": CLIENT_ID,
         "client_secret": CLIENT_SECRET
     }
     header = {
         "Content-Type": "application/json"
     }
-    response = make_request("POST", url_path, headers=header, json_data=payload, params=params)
+    response = make_request(base_url, "POST", url_path, headers=header, json_data=payload, params=params)
     
     if response:
         try:
             data = response.json()
             if data.get("errorCode") == 0:
                 result = data.get("result", {})                 
-                access_token = result.get("accessToken")
-                token_type = result.get("tokenType")
-                expires_in = result.get("expires_in")
-                refresh_token = result.get("refreshToken")
-                print(f"\nSuccessfully retrieved access token.")
-                print(f"Access Token: {access_token}")
-                print(f"Refresh Token: {refresh_token}")
-                print("\n\n-- Done Refresh --")
-                return access_token, refresh_token
+                new_access_token = result.get("accessToken")
+                new_refresh_token = result.get("refreshToken")
+                print(f"\nSuccessfully refreshed access token.")
+                return new_access_token, new_refresh_token
             else:
-                print(f"Failed to get access token: {data.get('msg')}")
+                print(f"Failed to refresh access token: {data.get('msg')}")
         except json.JSONDecodeError:
-            print("Failed to decode JSON from getAccessToken response.")
+            print("Failed to decode JSON from getRefreshToken response.")
     return None, None
-
-
-if __name__ == "__main__":
-    # Step 1: Perform the initial login and get the first access token.
-    csrf, session = login()
-    if not (csrf and session):
-        print("Initial login failed. Exiting.")
-    else:
-        auth_code = getAuthCode()
-        if not auth_code:
-            print("Failed to get authorization code. Exiting.")
-        else:
-            # Get the first access token
-            access_token, refresh_token = getAccessToken()
-
-            # If we have tokens, show the interactive menu.
-            if access_token and refresh_token:
-                while True:
-                    print("\n\n--- Interactive Menu ---")
-                    print("1. Use Refresh Token to get a new Access Token")
-                    print("q. Quit")
-
-                    try:
-                        choice = input("Enter your choice: ").strip()
-
-                        if choice == '1':
-                            getRefreshToken()
-                        elif choice.lower() == 'q':
-                            print("\nExiting script.")
-                            break
-                        else:
-                            print("\nInvalid choice. Please try again.")
-                    except KeyboardInterrupt:
-                        print("\n\n--- Script interrupted by user. Exiting. ---")
-                        break
-            else:
-                print("\nFailed to obtain initial tokens. Cannot proceed to interactive menu.")

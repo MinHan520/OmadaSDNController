@@ -7,7 +7,9 @@ function UserList() {
 
   useEffect(() => {
     // Fetch data from your Flask backend
-    fetch('http://127.0.0.1:5000/api/users')
+    fetch('http://127.0.0.1:5000/api/users', {
+      credentials: 'include', // Important: This tells fetch to send cookies
+    })
       .then(response => {
         if (!response.ok) {
           throw new Error('Network response was not ok');
