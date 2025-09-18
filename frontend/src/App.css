@@ -36,3 +36,18 @@
     transform: rotate(360deg);
   }
 }
+
+.main-content {
+    padding: 40px;
+    background-color: #f4f6f9;
+    overflow-y: auto;
+    height: 100vh;
+    /* Create space for the sidebar */
+    margin-left: 250px;
+    transition: margin-left 0.3s ease-in-out;
+}
+
+.app-container.sidebar-retracted .main-content {
+    /* Remove the margin when sidebar is hidden */
+    margin-left: 0;
+}

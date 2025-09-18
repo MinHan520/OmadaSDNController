@@ -1,0 +1,12 @@
+.main-content {
+    padding: 40px;
+    background-color: #f4f6f9;
+    overflow-y: auto;
+    height: 100vh;
+    margin-left: 250px;
+    transition: margin-left 0.3s ease-in-out;
+}
+
+.app-container.sidebar-retracted .main-content {
+    margin-left: 0;
+}
