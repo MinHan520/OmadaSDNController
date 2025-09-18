@@ -9,7 +9,7 @@
 .sidebar {
     width: 250px;
     background-color: #2c3e50;
-    color: white;
+    color: green;
     display: flex;
     flex-direction: column;
 }
@@ -48,5 +48,5 @@
 }
 
 .main-content h1 {
-    color: #2c3e50;
+    color: #010c16;
 }

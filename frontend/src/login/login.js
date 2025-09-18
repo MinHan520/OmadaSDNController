@@ -42,8 +42,8 @@ function Login() {
 
             // If login is successful
             alert('Successfully login into the TP-Link Omada Account.');
-            // Navigate to the user list page
-            navigate('/users');
+            // On success, the backend sets a session cookie. We can now navigate.
+            navigate('/dashboard');
 
         } catch (err) {
             // If there's a network error or the server threw an error
