@@ -1,5 +1,6 @@
 .main-content {
     padding: 40px;
+    padding-top: 100px;
     background-color: #f4f6f9;
     overflow-y: auto;
     height: 100vh;

@@ -2,13 +2,10 @@ import React from 'react';
 import { Link, NavLink } from 'react-router-dom';
 import './sidebar.css'; // We'll create this new CSS file
 
-function Sidebar({ isRetracted, toggleSidebar }) {
+function Sidebar({ isRetracted }) {
     return (
         <aside className={`sidebar ${isRetracted ? 'retracted' : ''}`}>
             <div className="sidebar-header">
-                <button className="hamburger-button" onClick={toggleSidebar}>
-                    ☰
-                </button>
                 <h3>Omada Controller</h3>
             </div>
             <nav className="sidebar-nav">
@@ -24,7 +21,8 @@ function Sidebar({ isRetracted, toggleSidebar }) {
                     <li className="dropdown">
                         <span className="dropdown-toggle">Users</span>
                         <ul className="dropdown-menu">
-                            <li><NavLink to="/users">User List</NavLink></li>
+                            <li><NavLink to="/userlist">User List</NavLink></li>
+                            <li><NavLink to="/groups">Group List</NavLink></li>
                             <li><NavLink to="/roles">Role List</NavLink></li>
                             {/* Add links to create/modify users later */}
                         </ul>

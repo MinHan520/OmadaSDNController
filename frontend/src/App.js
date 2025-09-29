@@ -3,7 +3,7 @@ import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-d
 import './App.css';
 import UserList from './UserList';
 import Login from './login/login.js';
-import Dashboard from './dashboard/dashboard.js'; 
+import Dashboard from './dashboard/dashboard.js';
 import Layout from './component/layout.js';
 
 function App() {
@@ -11,14 +11,17 @@ function App() {
     <Router>
       <div className="App">
         <Routes>
-          {/* Default route redirects to /login */}
+          {/* Public routes (no sidebar) */}
           <Route path="/login" element={<Login />} />
           <Route path="/" element={<Navigate to="/login" />} />
+
+          {/* Private routes wrapped by the Layout component */}
           <Route element={<Layout />}>
             <Route path="/dashboard" element={<Dashboard />} />
-            <Route path="/users" element={<UserList />} />
+            <Route path="/userlist" element={<UserList />} />
           </Route>
-          <Route path="*" element={<div>404 - Page Not Ground</div>} />
+
+          <Route path="*" element={<div>404 - Page Not Found</div>} />
         </Routes>
       </div>
     </Router>

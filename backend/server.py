@@ -62,7 +62,7 @@ def api_login():
     return jsonify({"success": True, "message": "Login successful."})
 
 # --- API Endpoints ---
-@app.route('/api/users', methods=['GET'])
+@app.route('/api/userlist', methods=['GET'])
 def api_get_users():
     """
     API endpoint to get a list of users.
@@ -72,13 +72,17 @@ def api_get_users():
         if not tokens:
             return jsonify({"error": "Not authenticated. Please log in again.", "errorCode": -1}), 401
 
+        # Get pagination parameters from the request, with defaults
+        page = request.args.get('page', 1, type=int)
+        page_size = request.args.get('pageSize', 10, type=int)
+
         # Initial call to get user list
         user_data, error_code = user_api.get_user_list(
             base_url=tokens['base_url'],
             omadac_id=tokens['omadac_id'],
             access_token=tokens['access_token'],
-            page=1,
-            page_size=10
+            page=page,
+            page_size=page_size
         )
 
         # If token expired, refresh and retry
@@ -100,8 +104,8 @@ def api_get_users():
                 base_url=tokens['base_url'],
                 omadac_id=tokens['omadac_id'],
                 access_token=tokens['access_token'],
-                page=1,
-                page_size=10
+                page=page,
+                page_size=page_size
             )
 
         if error_code == 0:
